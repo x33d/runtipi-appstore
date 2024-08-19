@@ -1,0 +1,78 @@
+version: "3.7"
+
+services:
+  unifi-network-application:
+    container_name: unifi-network-application
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - MONGO_USER=unifi
+      - MONGO_PASS=
+      - MONGO_HOST=unifi-db
+      - MONGO_PORT=27017
+      - MONGO_DBNAME=unifi
+      - MONGO_AUTHSOURCE=admin
+    volumes:
+      - ${APP_DATA_DIR}/data/nextcloud:/config
+    ports:
+      - ${APP_PORT}:8443
+      - ${APP_PORT}:3478/udp
+      - ${APP_PORT}:10001/udp
+      - ${APP_PORT}:8080
+      - ${APP_PORT}:1900/udp #optional
+      - ${APP_PORT}:8843 #optional
+      - ${APP_PORT}:8880 #optional
+      - ${APP_PORT}:6789 #optional
+      - ${APP_PORT}:5514/udp #optional
+    restart: unless-stopped
+    depends_on:
+      - unifi-db
+    networks:
+      - tipi_main_network
+    labels:
+        # Main
+        traefik.enable: true
+        traefik.http.middlewares.unifi-redirect.redirectscheme.scheme: https
+        traefik.http.services.unifi.loadbalancer.server.port: 80
+        # Web
+        traefik.http.routers.unifi-insecure.rule: Host(`${APP_DOMAIN}`)
+        traefik.http.routers.unifi-insecure.unifi: web
+        traefik.http.routers.unifi-insecure.service: unifi
+        traefik.http.routers.unifi-insecure.middlewares: unifi-redirect
+        # Websecure
+        traefik.http.routers.unifi.rule: Host(`${APP_DOMAIN}`)
+        traefik.http.routers.unifi.unifi: websecure
+        traefik.http.routers.unifi.service: unifi
+        traefik.http.routers.unifi.tls.certresolver: myresolver
+        # Local domain
+        traefik.http.routers.unifi-local-insecure.rule: Host(`unifi.${LOCAL_DOMAIN}`)
+        traefik.http.routers.unifi-local-insecure.unifi: web
+        traefik.http.routers.unifi-local-insecure.service: unifi
+        traefik.http.routers.unifi-local-insecure.middlewares: unifi-redirect
+        # Local domain secure
+        traefik.http.routers.unifi-local.rule: Host(`unifi.${LOCAL_DOMAIN}`)
+        traefik.http.routers.unifi-local.unifi: websecure
+        traefik.http.routers.unifi-local.service: unifi
+        traefik.http.routers.unifi-local.tls: true
+        runtipi.managed: true
+
+  unifi-db:
+    image: docker.io/mongo:8.0
+    container_name: unifi-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=
+      - MONGO_USER=unifi
+      - MONGO_PASS=
+      - MONGO_DBNAME=unifi
+      - MONGO_AUTHSOURCE=admin
+    volumes:
+      - ${APP_DATA_DIR}/data/db:/data/db
+      - ${APP_DATA_DIR}/data/db/init-mongo.sh:/docker-entrypoint-initdb.d/init-mongo.sh:ro
+    restart: unless-stopped
+    networks:
+      - tipi_main_network
+    labels:
+      runtipi.managed: true
